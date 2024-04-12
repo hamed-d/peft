@@ -36,7 +36,7 @@ class AdaLoraLayer(LoraLayer):
         self.lora_B = nn.ParameterDict({})
         self.ranknum = nn.ParameterDict({})
 
-    def update_layer(self, adapter_name, r, lora_alpha, lora_dropout, init_lora_weights, **kwargs):
+    def update_layer(self, adapter_name, r, lora_alpha, lora_dropout, init_lora_weights):
         if r <= 0:
             raise ValueError(f"`r` should be a positive integer value but the value passed is {r}")
 
@@ -47,66 +47,14 @@ class AdaLoraLayer(LoraLayer):
         else:
             lora_dropout_layer = nn.Identity()
 
-        indices = kwargs.pop('indices')
-        layer_idx = kwargs.pop('layer_idx')
-        target_name = kwargs.pop('target_name')
-        self.target_name = target_name
-
         self.lora_dropout[adapter_name] = lora_dropout_layer
-        if indices is None:
-            # Actual trainable parameters
-            # Right singular vectors
-            self.lora_A[adapter_name] = nn.Parameter(torch.randn(r, self.in_features))
-            # Left singular vectors
-            self.lora_B[adapter_name] = nn.Parameter(torch.randn(self.out_features, r))
-        else:
-            if target_name=='fc1':
-                row_indices = indices[f'visual.transformer.resblocks.{layer_idx}.mlp.c_fc'][0]
-                col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.mlp.c_fc'][1]
-            elif target_name=='fc2':
-                row_indices = indices[f'visual.transformer.resblocks.{layer_idx}.mlp.c_proj'][0]
-                col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.mlp.c_proj'][1]
-            elif target_name in ['q_proj', 'k_proj', 'v_proj']:
-                if target_name=='q_proj':                    
-                    row_idxs = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][0]
-                    col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][1]
-                    row_idxs = [idx for idx in row_idxs if idx<768]
-                    row_indices = row_idxs
-                elif target_name=='k_proj':
-                    row_idxs = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][0]
-                    col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][1]
-                    row_idxs = [idx-768 for idx in row_idxs if idx>=768 and idx<1536]
-                    row_indices = row_idxs
-                elif target_name=='v_proj':
-                    row_idxs = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][0]
-                    col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][1]
-                    row_idxs = [idx-768*2 for idx in row_idxs if idx>=1536]
-                    row_indices = row_idxs
-                # assert len(row_indices)!=0
-            elif target_name=='out_proj':
-                row_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn.out_proj'][0]
-                col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn.out_proj'][1]
-
-            self.indices_m = torch.tensor(row_indices).cuda().long()
-            self.indices_n = torch.tensor(col_indices).cuda().long()
-            self.indices_m = torch.unique(self.indices_m)
-            self.indices_n = torch.unique(self.indices_n)
-            self.indices_mn = torch.cartesian_prod(self.indices_m, self.indices_n)
-            
-            indices_m = torch.tensor(row_indices)
-            indices_n = torch.tensor(col_indices)
-            indices_m = torch.unique(indices_m)
-            indices_n = torch.unique(indices_n)
-            fan_out = len(indices_m)
-            fan_in = len(indices_n)
-            # Actual trainable parameters
-            # Right singular vectors
-            self.lora_A[adapter_name] = nn.Parameter(torch.randn(r, fan_out))
-            # Left singular vectors
-            self.lora_B[adapter_name] = nn.Parameter(torch.randn(fan_in, r))
-
+        # Actual trainable parameters
+        # Right singular vectors
+        self.lora_A[adapter_name] = nn.Parameter(torch.randn(r, self.in_features))
         # Singular values
         self.lora_E[adapter_name] = nn.Parameter(torch.randn(r, 1))
+        # Left singular vectors
+        self.lora_B[adapter_name] = nn.Parameter(torch.randn(self.out_features, r))
         # The current rank
         self.ranknum[adapter_name] = nn.Parameter(torch.randn(1), requires_grad=False)
         self.ranknum[adapter_name].data.fill_(float(r))
@@ -149,7 +97,7 @@ class SVDLinear(nn.Module, AdaLoraLayer):
 
         self.fan_in_fan_out = fan_in_fan_out
         self._active_adapter = adapter_name
-        self.update_layer(adapter_name, r, lora_alpha, lora_dropout, init_lora_weights, **kwargs)
+        self.update_layer(adapter_name, r, lora_alpha, lora_dropout, init_lora_weights)
 
     def merge(self, safe_merge: bool = False, adapter_names: Optional[List[str]] = None) -> None:
         """
@@ -227,12 +175,7 @@ class SVDLinear(nn.Module, AdaLoraLayer):
                 ranknum = self.ranknum[active_adapter] + 1e-5
 
                 x = x.to(lora_A.dtype)
-                adalora = (lora_A * lora_E).T @ lora_B.T
-                # print(self.in_features, self.out_features, adalora.shape, self.target_name)
-                residual = torch.zeros([self.in_features, self.out_features]).type_as(lora_A).to(lora_A.device)
-                # print(residual.shape, x.shape, self.indices_mn[:, 0].long().max(), self.indices_mn[:, 1].long().max())
-                residual[self.indices_mn[:, 1].long(), self.indices_mn[:, 0].long()] = adalora.view(-1)
-                result += (dropout(x) @ residual) * scaling / ranknum
+                result += (dropout(x) @ (lora_A * lora_E).T @ lora_B.T) * scaling / ranknum
 
         return result
 

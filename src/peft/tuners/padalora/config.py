@@ -20,7 +20,7 @@ from peft.utils import PeftType
 
 
 @dataclass
-class AdaLoraConfig(LoraConfig):
+class PAdaLoraConfig(LoraConfig):
     """
     This is the configuration class to store the configuration of a [`~peft.AdaLora`].
 
@@ -47,7 +47,8 @@ class AdaLoraConfig(LoraConfig):
     orth_reg_weight: float = field(default=0.5, metadata={"help": "The orthogonal regularization coefficient."})
     total_step: Optional[int] = field(default=None, metadata={"help": "The total training steps."})
     rank_pattern: Optional[dict] = field(default=None, metadata={"help": "The saved rank pattern."})
-    indices: Optional[list] = field(default=None, metadata={"help": "The indices of the weight matrix."})
+    row_indices: Optional[list] = field(default=None, metadata={"help": "The row indices of the weight matrix."})
+    col_indices: Optional[list] = field(default=None, metadata={"help": "The column indices of the weight matrix."})
 
     def __post_init__(self):
-        self.peft_type = PeftType.ADALORA
+        self.peft_type = PeftType.PADALORA

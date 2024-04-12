@@ -117,9 +117,8 @@ class AdaLoraModel(LoraModel):
             "lora_dropout": lora_config.lora_dropout,
             "fan_in_fan_out": lora_config.fan_in_fan_out,
             "init_lora_weights": lora_config.init_lora_weights,
-            "indices": lora_config.indices,
-            "target_name": target_name,
-            "layer_idx": current_key.split(".")[3],
+            # "row_indices": lora_config.row_indices,
+            # "col_indices": lora_config.col_indices,
             "loaded_in_8bit": getattr(self.model, "is_loaded_in_8bit", False),
             "loaded_in_4bit": getattr(self.model, "is_loaded_in_4bit", False),
         }
@@ -133,6 +132,7 @@ class AdaLoraModel(LoraModel):
         if quantization_config is not None:
             kwargs["gptq_quantization_config"] = quantization_config
 
+        layer_idx = current_key.split(".")[3]
         # If it is not an AdaLoraLayer, create a new module, else update it with new adapters
         if not isinstance(target, AdaLoraLayer):
             new_module = self._create_new_module(lora_config, adapter_name, target, **kwargs)
