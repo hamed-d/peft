@@ -82,7 +82,6 @@ class AdaLoraLayer(LoraLayer):
                     col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][1]
                     row_idxs = [idx-768*2 for idx in row_idxs if idx>=1536]
                     row_indices = row_idxs
-                # assert len(row_indices)!=0
             elif target_name=='out_proj':
                 row_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn.out_proj'][0]
                 col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn.out_proj'][1]
