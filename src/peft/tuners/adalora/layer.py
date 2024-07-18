@@ -50,7 +50,9 @@ class AdaLoraLayer(LoraLayer):
         indices = kwargs.pop('indices')
         layer_idx = kwargs.pop('layer_idx')
         target_name = kwargs.pop('target_name')
+        current_key = kwargs.pop('current_key')
         self.target_name = target_name
+        print(current_key)
 
         self.lora_dropout[adapter_name] = lora_dropout_layer
         if indices is None:
@@ -60,31 +62,63 @@ class AdaLoraLayer(LoraLayer):
             # Left singular vectors
             self.lora_B[adapter_name] = nn.Parameter(torch.randn(self.out_features, r))
         else:
-            if target_name=='fc1':
-                row_indices = indices[f'visual.transformer.resblocks.{layer_idx}.mlp.c_fc'][0]
-                col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.mlp.c_fc'][1]
-            elif target_name=='fc2':
-                row_indices = indices[f'visual.transformer.resblocks.{layer_idx}.mlp.c_proj'][0]
-                col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.mlp.c_proj'][1]
-            elif target_name in ['q_proj', 'k_proj', 'v_proj']:
-                if target_name=='q_proj':                    
-                    row_idxs = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][0]
-                    col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][1]
-                    row_idxs = [idx for idx in row_idxs if idx<768]
-                    row_indices = row_idxs
-                elif target_name=='k_proj':
-                    row_idxs = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][0]
-                    col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][1]
-                    row_idxs = [idx-768 for idx in row_idxs if idx>=768 and idx<1536]
-                    row_indices = row_idxs
-                elif target_name=='v_proj':
-                    row_idxs = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][0]
-                    col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][1]
-                    row_idxs = [idx-768*2 for idx in row_idxs if idx>=1536]
-                    row_indices = row_idxs
-            elif target_name=='out_proj':
-                row_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn.out_proj'][0]
-                col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn.out_proj'][1]
+            # if target_name=='fc1':
+            #     # row_indices = indices[f'visual.transformer.resblocks.{layer_idx}.mlp.c_fc'][0]
+            #     # col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.mlp.c_fc'][1]
+
+            #     row_indices = indices[f'{layer_idx}.fc1'][0]
+            #     col_indices = indices[f'{layer_idx}.fc1'][1]
+            # elif target_name=='fc2':
+            #     # row_indices = indices[f'visual.transformer.resblocks.{layer_idx}.mlp.c_proj'][0]
+            #     # col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.mlp.c_proj'][1]
+            #     row_indices = indices[f'{layer_idx}.fc2'][0]
+            #     col_indices = indices[f'{layer_idx}.fc2'][1]
+            # elif target_name in ['q_proj', 'k_proj', 'v_proj']:
+            #     if target_name=='q_proj':                    
+            #         # row_idxs = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][0]
+            #         # col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][1]
+            #         row_idxs = indices[f'{layer_idx}.attn_in'][0]
+            #         col_indices = indices[f'{layer_idx}.attn_in'][1]
+            #         row_idxs = [idx for idx in row_idxs if idx<768]
+            #         row_indices = row_idxs
+            #     elif target_name=='k_proj':
+            #         # row_idxs = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][0]
+            #         # col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][1]
+            #         row_idxs = indices[f'{layer_idx}.attn_in'][0]
+            #         col_indices = indices[f'{layer_idx}.attn_in'][1]
+            #         row_idxs = [idx-768 for idx in row_idxs if idx>=768 and idx<1536]
+            #         row_indices = row_idxs
+            #     elif target_name=='v_proj':
+            #         # row_idxs = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][0]
+            #         # col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn'][1]
+            #         row_idxs = indices[f'{layer_idx}.attn_in'][0]
+            #         col_indices = indices[f'{layer_idx}.attn_in'][1]
+            #         row_idxs = [idx-768*2 for idx in row_idxs if idx>=1536]
+            #         row_indices = row_idxs
+            # elif target_name=='out_proj':
+            #     # row_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn.out_proj'][0]
+            #     # col_indices = indices[f'visual.transformer.resblocks.{layer_idx}.attn.out_proj'][1]
+            #     row_indices = indices[f'{layer_idx}.attn_out'][0]
+            #     col_indices = indices[f'{layer_idx}.attn_out'][1]
+
+            if 'intermediate.dense' in current_key:
+                row_indices = indices[f'{layer_idx}.fc1'][0]
+                col_indices = indices[f'{layer_idx}.fc1'][1]
+            elif 'output.dense' in current_key and 'attention' not in current_key:
+                row_indices = indices[f'{layer_idx}.fc2'][0]
+                col_indices = indices[f'{layer_idx}.fc2'][1]
+            elif 'self.query_proj' in current_key:
+                row_indices = indices[f'{layer_idx}.attn_in'][0]
+                col_indices = indices[f'{layer_idx}.attn_in'][1]
+            elif 'key_proj' in current_key:
+                row_indices = indices[f'{layer_idx}.attn_in'][0]
+                col_indices = indices[f'{layer_idx}.attn_in'][1]
+            elif 'value_proj' in current_key:                    
+                row_indices = indices[f'{layer_idx}.attn_in'][0]
+                col_indices = indices[f'{layer_idx}.attn_in'][1]
+            elif 'attention.output.dense' in current_key:
+                row_indices = indices[f'{layer_idx}.attn_out'][0]
+                col_indices = indices[f'{layer_idx}.attn_out'][1]
 
             self.indices_m = torch.tensor(row_indices).cuda().long()
             self.indices_n = torch.tensor(col_indices).cuda().long()
@@ -103,6 +137,7 @@ class AdaLoraLayer(LoraLayer):
             self.lora_A[adapter_name] = nn.Parameter(torch.randn(r, fan_out))
             # Left singular vectors
             self.lora_B[adapter_name] = nn.Parameter(torch.randn(fan_in, r))
+            print(target_name, [r, fan_out], [fan_in, r])
 
         # Singular values
         self.lora_E[adapter_name] = nn.Parameter(torch.randn(r, 1))
@@ -228,8 +263,11 @@ class SVDLinear(nn.Module, AdaLoraLayer):
                 x = x.to(lora_A.dtype)
                 adalora = (lora_A * lora_E).T @ lora_B.T
                 # print(self.in_features, self.out_features, adalora.shape, self.target_name)
+                # print(self.in_features, self.out_features, adalora.shape, self.target_name, lora_A.shape, lora_B.shape)
                 residual = torch.zeros([self.in_features, self.out_features]).type_as(lora_A).to(lora_A.device)
-                # print(residual.shape, x.shape, self.indices_mn[:, 0].long().max(), self.indices_mn[:, 1].long().max())
+                # print(residual[self.indices_mn[:, 1].long(), self.indices_mn[:, 0].long()].shape)
+                # print(residual.shape, x.shape, self.indices_mn.shape, torch.isnan(self.indices_mn).any())
+                # print(self.indices_mn[:, 1].long().max(), self.indices_mn[:, 1].long().min(), self.indices_mn[:, 0].long().max(), self.indices_mn[:, 0].long().min())
                 residual[self.indices_mn[:, 1].long(), self.indices_mn[:, 0].long()] = adalora.view(-1)
                 result += (dropout(x) @ residual) * scaling / ranknum
 
